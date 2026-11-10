@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>心历日记</title>
+    <style>
+        :root { --bg: #FCFBF9; --main: #333; --sub: #999; --line: #F0EFEA; --theme: #F5CE7A; --chart: #78A4A4; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; padding: 0; font-family: -apple-system, sans-serif; background-color: var(--bg); color: var(--main); padding-bottom: 80px; overflow-x: hidden; background-image: linear-gradient(to right, #f5f5f5 1px, transparent 1px), linear-gradient(to bottom, #f5f5f5 1px, transparent 1px); background-size: 20px 20px; }
+        
+        /* 顶部 & 通用 */
+        .top-bar { position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; padding: 20px; background: rgba(252, 251, 249, 0.9); backdrop-filter: blur(10px); }
+        .page-title { font-size: 18px; font-weight: bold; }
+        .month-label { background: #fff; padding: 6px 16px; border-radius: 20px; font-size: 15px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .month-picker { position: absolute; top: 60px; right: 20px; background: #fff; border-radius: 12px; padding: 10px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); display: none; grid-template-columns: repeat(3, 1fr); gap: 8px; z-index: 150; }
+        .month-item { padding: 8px 16px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        .page-view { padding: 0 20px; display: none; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* 首页日历 */
+        #home-view { display: block; padding-top: 10px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 30px; }
+        .cal-day { aspect-ratio: 1; border-radius: 14px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 15px; color: var(--sub); background: #fff; cursor: pointer; border: 1px solid var(--line); }
+        .cal-day.today { border-color: var(--theme); color: var(--main); font-weight: bold; }
+        .cal-day.has-mood { border: none; font-size: 22px; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .cal-day.has-mood .day-num { font-size: 10px; position: absolute; bottom: 4px; color: rgba(255,255,255,0.8); }
+        .cal-day.has-mood img { width: 24px; height: 24px; object-fit: contain; margin-bottom: 12px; }
+
+        /* 气泡页 */
+        #bubble-view { height: calc(100vh - 80px); position: relative; overflow: hidden; padding: 0; }
+        .bubble { position: absolute; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: inset 0 0 10px rgba(255,255,255,0.6), 0 4px 15px rgba(0,0,0,0.08); cursor: pointer; animation: floatUp infinite ease-in-out alternate; }
+        .bubble-emoji { font-size: 28px; margin-bottom: 2px; display: flex; justify-content: center; align-items: center;}
+        .bubble-emoji img { width: 32px; height: 32px; object-fit: contain; }
+        .bubble-text { font-size: 12px; font-weight: bold; color: #333; }
+        .bubble-count { font-size: 10px; color: #666; }
+        @keyframes floatUp { 0% { transform: translateY(0px) translateX(0px); } 50% { transform: translateY(-15px) translateX(8px); } 100% { transform: translateY(-30px) translateX(-8px); } }
+
+        /* 数据统计 */
+        #stats-view { padding-top: 10px; }
+        .chart-card { background: #fff; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); margin-bottom: 20px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .card-title { font-size: 16px; font-weight: bold; }
+        .time-toggle { display: flex; background: #F7F7F7; border-radius: 8px; padding: 2px; }
+        .time-toggle div { padding: 4px 8px; font-size: 13px; border-radius: 6px; cursor: pointer; color: var(--sub); }
+        .time-toggle div.active { background: #fff; color: var(--main); font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        
+        /* 图表精准对齐容器 */
+        .line-chart-wrapper { display: flex; height: 180px; margin-bottom: 10px; position: relative; }
+        .y-axis { display: flex; flex-direction: column; justify-content: space-between; padding-right: 8px; font-size: 20px; align-items: center; width: 30px; height: 100%; }
+        .y-axis img { width: 24px; height: 24px; object-fit: contain; }
+        .chart-area { flex: 1; position: relative; border-left: 1px solid #f0f0f0; border-bottom: 1px solid #f0f0f0; margin-bottom: 12px; }
+        .chart-svg { width: 100%; height: 100%; overflow: visible; }
+        
+        .x-axis { display: flex; justify-content: space-between; padding-left: 38px; font-size: 12px; color: var(--sub); }
+        
+        .progress-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; margin-bottom: 20px; background: #f0f0f0; }
+        .progress-segment { height: 100%; }
+        .stats-list { display: flex; flex-wrap: wrap; gap: 15px; }
+        .stats-item { display: flex; align-items: center; width: 45%; }
+        .stats-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        .stats-name { font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 4px;}
+        .stats-name img { width: 16px; height: 16px; object-fit: contain; }
+        .stats-val { font-size: 11px; color: var(--sub); }
+
+        /* 时间轴 & 标签 */
+        #timeline-view { padding-top: 10px; }
+        .search-bar { width: 100%; padding: 12px 15px; border-radius: 12px; border: 1px solid var(--line); background: #fff; margin-bottom: 15px; font-size: 15px; outline: none; }
+        .timeline-list { display: flex; flex-direction: column; gap: 15px; }
+        .timeline-item { background: #fff; padding: 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); cursor: pointer; position: relative; overflow: hidden; }
+        .timeline-line { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+        .tl-header { display: flex; justify-content: space-between; align-items: center; }
+        .tl-date { font-size: 14px; color: var(--main); font-weight: bold; }
+        .tl-mood { font-size: 20px; display: flex; justify-content: center; align-items: center;}
+        .tl-mood img { width: 24px; height: 24px; object-fit: contain; }
+        .tl-text { font-size: 15px; color: #555; line-height: 1.5; }
+        .tl-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+        .tag { background: #F0F7FF; color: #4A90E2; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight:bold;}
+
+        /* 设置页 */
+        #settings-view { padding-top: 10px; }
+        .settings-group-title { font-size: 14px; color: var(--sub); margin: 20px 0 10px 10px; font-weight: bold; }
+        .settings-list { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid var(--line); cursor: pointer; }
+        .setting-item:last-child { border-bottom: none; }
+        .setting-item-left { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: bold;}
+        .setting-arrow { color: #ccc; font-size: 18px; }
+
+        /* 自定义表情包设置页 */
+        #emoji-settings-view { padding-top: 10px; }
+        .emoji-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; padding-bottom: 30px;}
+        .emoji-card { background: #fff; border-radius: 16px; padding: 15px; display: flex; flex-direction: column; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.03); cursor: pointer; }
+        .emoji-img-container { width: 60px; height: 60px; display: flex; justify-content: center; align-items: center; background: #F7F7F7; border-radius: 50%; font-size: 32px; overflow: hidden;}
+        .emoji-img-container img { width: 100%; height: 100%; object-fit: contain; }
+        .emoji-name { font-size: 14px; font-weight: bold; }
+
+        /* 底部导航 */
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 70px; display: flex; justify-content: space-around; align-items: center; background: var(--bg); padding-bottom: env(safe-area-inset-bottom); z-index: 100; border-top: 1px solid var(--line); }
+        .nav-icon { width: 50px; height: 50px; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+        .nav-icon svg { width: 26px; height: 26px; fill: var(--main); }
+        .fab-add { width: 52px; height: 52px; background: var(--theme); color: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 28px; box-shadow: 0 4px 12px rgba(245,206,122,0.4); transform: translateY(-10px); }
+
+        /* 弹窗 & 标签栏 */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(5px); display: none; justify-content: flex-end; flex-direction: column; z-index: 200; }
+        .modal-content { background: #fff; border-radius: 24px 24px 0 0; padding: 20px; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; padding-bottom: 30px; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-title { text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 20px; }
+        .mood-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+        .mood-item { display: flex; flex-direction: column; align-items: center; cursor: pointer; opacity: 0.3; transition: 0.2s; }
+        .mood-item.selected { opacity: 1; transform: scale(1.1); }
+        .mood-item .face { width: 44px; height: 44px; border-radius: 50%; margin-bottom: 6px; display: flex; justify-content: center; align-items: center; font-size: 24px; overflow: hidden;}
+        .mood-item .face img { width: 100%; height: 100%; object-fit: contain; }
+        .mood-item span { font-size: 12px; }
+        textarea { width: 100%; height: 100px; border: none; background: #F7F7F7; border-radius: 16px; padding: 15px; font-size: 16px; resize: none; outline: none; margin-bottom: 10px; font-family: inherit;}
+        
+        .tag-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; scrollbar-width: none; }
+        .tag-btn { background: #F0F7FF; color: #4A90E2; padding: 6px 10px 6px 12px; border-radius: 20px; font-size: 13px; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: bold;}
+        .tag-btn .del-tag { background: rgba(74,144,226,0.2); border-radius: 50%; width: 16px; height: 16px; display: flex; justify-content: center; align-items: center; font-size: 12px; color: #4A90E2;}
+
+        .media-preview-area { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .media-box { position: relative; width: 80px; height: 80px; border-radius: 12px; background: #F7F7F7; display: flex; justify-content: center; align-items: center; }
+        .media-box img { max-width: 100%; max-height: 100%; border-radius: 12px; object-fit: contain; }
+        .remove-media { position: absolute; top: -5px; right: -5px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; font-size: 14px; }
+        .action-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .btn { flex: 1; padding: 12px; border-radius: 12px; border: none; font-size: 14px; font-weight: bold; cursor: pointer; }
+        .btn-outline { background: #F7F7F7; color: var(--main); }
+        .btn-primary { background: var(--theme); color: #fff; padding: 15px; width: 100%; }
+        .cancel-btn { text-align: center; padding: 15px; color: var(--sub); font-size: 16px; }
+
+        .detail-header { display: flex; align-items: center; margin-bottom: 20px; }
+        .detail-icon { width: 60px; height: 60px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 32px; margin-right: 15px; overflow: hidden;}
+        .detail-icon img { width: 100%; height: 100%; object-fit: contain; }
+        .detail-text { font-size: 18px; line-height: 1.6; margin-bottom: 20px; word-break: break-all; }
+        .detail-img { width: 100%; border-radius: 16px; margin-bottom: 15px;}
+
+        /* 裁剪 */
+        .crop-modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 999; display: none; flex-direction: column; }
+        .crop-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; color: white; }
+        .crop-confirm { color: #4ADE80; font-weight: bold; cursor: pointer; }
+        .crop-container { flex: 1; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; background: #111; }
+        .crop-box { position: absolute; border: 2px dashed rgba(255,255,255,0.8); z-index: 10; width: 70vw; height: 70vw; min-width: 100px; min-height: 100px; }
+        .crop-box::after { content: ''; position: absolute; top: -50px; left: -50px; right: -50px; bottom: -50px; box-shadow: 0 0 0 100vmax rgba(0,0,0,0.7); z-index: -1; pointer-events: none; }
+        .resize-handle { position: absolute; width: 20px; height: 20px; background: #fff; border-radius: 50%; border: 2px solid #333; z-index: 20; pointer-events: auto; }
+        .handle-tl { top: -10px; left: -10px; cursor: nwse-resize; }
+        .handle-tr { top: -10px; right: -10px; cursor: nesw-resize; }
+        .handle-bl { bottom: -10px; left: -10px; cursor: nesw-resize; }
+        .handle-br { bottom: -10px; right: -10px; cursor: nwse-resize; }
+        #crop-img { position: absolute; transform-origin: center center; max-width: none; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar" id="top-bar">
+        <div class="page-title" id="main-title">心历日记</div>
+        <div class="month-label" id="month-btn" onclick="toggleMonthPicker()"><span id="current-month-text">11月</span></div>
+        <div class="month-picker" id="month-picker"></div>
+    </div>
+
+    <div class="main-container">
+        <div class="page-view" id="home-view"><div class="calendar-grid" id="calendar-grid"></div></div>
+        <div class="page-view" id="bubble-view"></div>
+        
+        <div class="page-view" id="stats-view">
+            <div class="chart-card">
+                <div class="card-header">
+                    <div class="card-title">情绪图表</div>
+                    <div class="time-toggle" id="chart-toggle">
+                        <div onclick="changeChartMode('day')">日</div>
+                        <div onclick="changeChartMode('7d')">7天</div>
+                        <div onclick="changeChartMode('14d')">14天</div>
+                        <div class="active" onclick="changeChartMode('month')">月</div>
+                        <div onclick="changeChartMode('year')">年</div>
+                    </div>
+                </div>
+                <div class="line-chart-wrapper">
+                    <div class="y-axis" id="y-axis"></div>
+                    <div class="chart-area"><svg class="chart-svg" id="chart-svg" preserveAspectRatio="none"></svg></div>
+                </div>
+                <div class="x-axis" id="x-axis"></div>
+            </div>
+
+            <div class="chart-card">
+                <div class="card-header">
+                    <div class="card-title">心情分布</div>
+                    <div class="time-toggle" id="dist-toggle">
+                        <div class="active" onclick="changeDistMode('day')">日</div>
+                        <div onclick="changeDistMode('week')">周</div>
+                        <div onclick="changeDistMode('month')">月</div>
+                    </div>
+                </div>
+                <div class="progress-bar" id="progress-bar"></div>
+                <div class="stats-list" id="stats-list"></div>
+            </div>
+        </div>
+
+        <div class="page-view" id="timeline-view">
+            <input type="text" class="search-bar" id="search-input" placeholder="🔍 搜索日记内容或 #标签..." oninput="renderTimeline()">
+            <div class="timeline-list" id="timeline-list"></div>
+        </div>
+
+        <div class="page-view" id="settings-view">
+            <div class="settings-group-title">个性化</div>
+            <div class="settings-list">
+                <div class="setting-item" onclick="showPage('emojiSettings')"><div class="setting-item-left"><span>🎨</span> 自定义表情包</div><div class="setting-arrow">›</div></div>
+            </div>
+            <div class="settings-group-title">其它</div>
+            <div class="settings-list">
+                <div class="setting-item" onclick="exportData()"><div class="setting-item-left"><span>📤</span> 导出所有日记</div><div class="setting-arrow">›</div></div>
+            </div>
+            <div style="text-align: center; color: #ccc; font-size: 12px; margin-top: 40px;">当前版本：1.0.0 (Pro)</div>
+        </div>
+
+        <div class="page-view" id="emoji-settings-view">
+            <div class="settings-group-title" style="margin-top: 0;">点击下方图标，上传你自己的图片来替换</div>
+            <div class="emoji-grid" id="emoji-settings-grid"></div>
+        </div>
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-icon" onclick="toggleNav('timeline')"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg></div>
+        <div class="nav-icon" onclick="toggleNav('bubble')"><svg viewBox="0 0 24 24"><path d="M12,4c-4.42,0-8,2.69-8,6c0,0.74,0.23,1.44,0.65,2.09C3.66,12.34,3,13.34,3,14.5c0,2.49,4.03,4.5,9,4.5 s9-2.01,9-4.5c0-1.16-0.66-2.16-1.65-2.41C19.77,11.44,20,10.74,20,10C20,6.69,16.42,4,12,4z M12,6c2.76,0,5,1.34,5,3 s-2.24,3-5,3s-5-1.34-5-3S9.24,6,12,6z"/></svg></div>
+        <div class="fab-add" onclick="openModal()">+</div>
+        <div class="nav-icon" onclick="toggleNav('stats')"><svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg></div>
+        <div class="nav-icon" onclick="toggleNav('settings')"><svg viewBox="0 0 24 24"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg></div>
+    </div>
+
+    <div class="modal-overlay" id="add-modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modal-title">今天的心情是？</div>
+            <div class="mood-grid" id="mood-grid"></div>
+            <textarea id="note-text" placeholder="记录此刻发生的事情... 输入 #加空格 生成标签" oninput="checkTagInput(event)"></textarea>
+            <div class="tag-row" id="tag-row"></div>
+            <div class="media-preview-area">
+                <div class="media-box" id="img-box" style="display:none;"><img id="img-preview" src=""><div class="remove-media" onclick="removeMedia()">×</div></div>
+            </div>
+            <div class="action-row"><button class="btn btn-outline" onclick="document.getElementById('file-input-img').click()">📷 添加图片</button></div>
+            <button class="btn btn-primary" onclick="saveNote()">保存</button>
+            <div class="cancel-btn" onclick="closeModal('add-modal')">取消</div>
+            <input type="file" id="file-input-img" accept="image/*" style="display: none;" onchange="startCrop(event)">
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="detail-modal">
+        <div class="modal-content">
+            <div class="detail-header">
+                <div class="detail-icon" id="detail-icon"></div>
+                <div><div style="font-size: 14px; color: var(--sub);" id="detail-time"></div><div style="font-weight:bold; font-size: 18px;" id="detail-mood-name"></div></div>
+            </div>
+            <div class="detail-text" id="detail-text"></div>
+            <img class="detail-img" id="detail-img" src="" style="display:none;">
+            <div class="cancel-btn" onclick="closeModal('detail-modal')">关闭</div>
+        </div>
+    </div>
+
+    <div class="crop-modal" id="crop-modal">
+        <div class="crop-header"><div onclick="cancelCrop()">取消</div><div style="font-weight:bold;">自由拖拽裁剪</div><div class="crop-confirm" onclick="confirmCrop()">确定</div></div>
+        <div class="crop-container" id="crop-container">
+            <img id="crop-img" src="">
+            <div class="crop-box" id="crop-box">
+                <div class="resize-handle handle-tl" onmousedown="startResize(event, 'tl')" ontouchstart="startResize(event, 'tl')"></div>
+                <div class="resize-handle handle-tr" onmousedown="startResize(event, 'tr')" ontouchstart="startResize(event, 'tr')"></div>
+                <div class="resize-handle handle-bl" onmousedown="startResize(event, 'bl')" ontouchstart="startResize(event, 'bl')"></div>
+                <div class="resize-handle handle-br" onmousedown="startResize(event, 'br')" ontouchstart="startResize(event, 'br')"></div>
+            </div>
+        </div>
+    </div>
+    <input type="file" id="emoji-upload-input" accept="image/*" style="display: none;" onchange="uploadCustomEmoji(event)">
+
+    <script>
+        const defaultMoods = [
+            { id: 'happy', color: '#FFD54F', emoji: '😊', text: '开心', score: 9 },
+            { id: 'warm', color: '#FFE082', emoji: '🥰', text: '暖心', score: 9 },
+            { id: 'fulfilled', color: '#FFCC80', emoji: '✨', text: '充实', score: 8 },
+            { id: 'proud', color: '#C5E1A5', emoji: '😎', text: '得意', score: 8 },
+            { id: 'surprised', color: '#FFB74D', emoji: '🤩', text: '惊喜', score: 10 },
+            { id: 'calm', color: '#81C784', emoji: '😐', text: '平静', score: 6 },
+            { id: 'confused', color: '#E0E0E0', emoji: '😶', text: '迷茫', score: 5 },
+            { id: 'crush', color: '#FF8A80', emoji: '😍', text: '心动', score: 8 },
+            { id: 'sweet', color: '#F48FB1', emoji: '🥳', text: '甜蜜', score: 9 },
+            { id: 'lonely', color: '#B0BEC5', emoji: '🫥', text: '孤独', score: 4 },
+            { id: 'tired', color: '#CE93D8', emoji: '😮‍💨', text: '疲惫', score: 4 },
+            { id: 'wronged', color: '#90CAF9', emoji: '🥹', text: '委屈', score: 3 },
+            { id: 'sad', color: '#7986CB', emoji: '🥺', text: '难过', score: 3 },
+            { id: 'annoyed', color: '#BCAAA4', emoji: '😖', text: '烦躁', score: 2 },
+            { id: 'angry', color: '#EF5350', emoji: '🤬', text: '生气', score: 1 }
+        ];
+
+        let moods = JSON.parse(localStorage.getItem('custom_moods')) || defaultMoods;
+        let notes = JSON.parse(localStorage.getItem('cosmos_notes_v8')) || [];
+        let savedTags = JSON.parse(localStorage.getItem('cosmos_tags_v2')) || ['#阅读', '#健身', '#工作', '#生活'];
+        let currentMood = moods[0], imgData = null;
+        let viewYear = new Date().getFullYear(), viewMonth = new Date().getMonth();
+        let targetDate = null, chartMode = 'month', distMode = 'day', cropTargetEmojiId = null;
+
+        if(notes.length === 0) {
+            notes = [{ id: 1, dateStr: `${viewYear}/${(viewMonth+1).toString().padStart(2,'0')}/05`, time: "08:00", mood: moods[5], text: '今天去跑了步 #健身', tags: ['#健身'], image: null }];
+            localStorage.setItem('cosmos_notes_v8', JSON.stringify(notes));
+        }
+
+        function init() { renderMoods(); renderTags(); renderMonthPicker(); showPage('home'); }
+
+        function showPage(page) {
+            document.querySelectorAll('.page-view').forEach(el => el.style.display = 'none');
+            document.getElementById('month-picker').style.display = 'none';
+            document.getElementById('month-btn').style.display = 'none';
+            window.scrollTo(0,0);
+
+            if(page === 'home') {
+                document.getElementById('main-title').innerText = '心历日记';
+                document.getElementById('month-btn').style.display = 'flex';
+                document.getElementById('home-view').style.display = 'block';
+                renderCalendar();
+            } else if(page === 'bubble') {
+                document.getElementById('main-title').innerText = '心情宇宙';
+                document.getElementById('bubble-view').style.display = 'block';
+                renderBubbles();
+            } else if(page === 'stats') {
+                document.getElementById('main-title').innerText = '数据洞察';
+                document.getElementById('stats-view').style.display = 'block';
+                renderStats();
+            } else if(page === 'timeline') {
+                document.getElementById('main-title').innerText = '时间轴';
+                document.getElementById('timeline-view').style.display = 'block';
+                renderTimeline();
+            } else if(page === 'settings') {
+                document.getElementById('main-title').innerText = '设置';
+                document.getElementById('settings-view').style.display = 'block';
+            } else if(page === 'emojiSettings') {
+                document.getElementById('main-title').innerText = '自定义表情';
+                document.getElementById('emoji-settings-view').style.display = 'block';
+                renderEmojiSettings();
+            }
+        }
+
+        function toggleNav(page) {
+            const title = document.getElementById('main-title').innerText;
+            if(title === '心历日记' && page === 'home') return;
+            if((page === 'timeline' && title === '时间轴') || (page === 'bubble' && title === '心情宇宙') || 
+               (page === 'stats' && title === '数据洞察') || (page === 'settings' && title === '设置')) {
+                showPage('home');
+            } else { showPage(page); }
+        }
+
+        function renderTags() {
+            const row = document.getElementById('tag-row'); row.innerHTML = '';
+            savedTags.forEach((tag, index) => {
+                const btn = document.createElement('div'); btn.className = 'tag-btn';
+                btn.innerHTML = `${tag} <span class="del-tag" onclick="deleteTag(event, ${index})">×</span>`;
+                btn.onclick = (e) => { if(e.target.classList.contains('del-tag')) return; const ta = document.getElementById('note-text'); ta.value += ` ${tag} `; ta.focus(); };
+                row.appendChild(btn);
+            });
+        }
+        function deleteTag(e, index) { e.stopPropagation(); savedTags.splice(index, 1); localStorage.setItem('cosmos_tags_v2', JSON.stringify(savedTags)); renderTags(); }
+
+        function checkTagInput(e) {
+            if(e && e.inputType !== 'insertText' && e.inputType !== 'insertLineBreak') return;
+            const val = document.getElementById('note-text').value;
+            const match = val.match(/#([^\s#]+)\s$/); 
+            if(match) {
+                const tagName = '#' + match[1];
+                if(!savedTags.includes(tagName) && match[1].length > 0) {
+                    savedTags.push(tagName); localStorage.setItem('cosmos_tags_v2', JSON.stringify(savedTags)); renderTags();
+                }
+            }
+        }
+
+        function changeChartMode(mode) {
+            chartMode = mode;
+            document.querySelectorAll('#chart-toggle div').forEach(el => el.classList.remove('active'));
+            const modes = ['day', '7d', '14d', 'month', 'year'];
+            document.querySelectorAll('#chart-toggle div')[modes.indexOf(mode)].classList.add('active');
+            renderStats();
+        }
+
+        function changeDistMode(mode) {
+            distMode = mode;
+            document.querySelectorAll('#dist-toggle div').forEach(el => el.classList.remove('active'));
+            const modes = ['day', 'week', 'month'];
+            document.querySelectorAll('#dist-toggle div')[modes.indexOf(mode)].classList.add('active');
+            renderStats();
+        }
+
+        function getNotesByRange(range) {
+            const today = new Date(); today.setHours(23,59,59,999);
+            const todayStr = today.getFullYear() + '/' + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getDate().toString().padStart(2,'0');
+            if(range === 'day') return notes.filter(n => n.dateStr === todayStr);
+            if(range === 'week') { const lastWeek = new Date(); lastWeek.setDate(lastWeek.getDate() - 7); return notes.filter(n => new Date(n.dateStr) >= lastWeek); }
+            if(range === 'month') return notes.filter(n => parseInt(n.dateStr.split('/')[0]) === viewYear && parseInt(n.dateStr.split('/')[1]) === (viewMonth + 1));
+            if(range === 'year') return notes.filter(n => parseInt(n.dateStr.split('/')[0]) === viewYear);
+            return [];
+        }
+
+        function renderStats() {
+            let targetChartNotes = [], xLabels = [];
+            if (chartMode === 'day') {
+                targetChartNotes = getNotesByRange('day').sort((a,b) => a.time.localeCompare(b.time));
+                xLabels = ['00:00', '06:00', '12:00', '18:00', '24:00'];
+                drawLineChart(targetChartNotes, true, xLabels);
+            } else if (chartMode === '7d' || chartMode === '14d') {
+                const days = chartMode === '7d' ? 7 : 14;
+                const start = new Date(); start.setDate(start.getDate() - days + 1);
+                targetChartNotes = notes.filter(n => new Date(n.dateStr) >= start).sort((a,b) => new Date(a.dateStr + ' ' + a.time) - new Date(b.dateStr + ' ' + b.time));
+                xLabels = [`${start.getMonth()+1}/${start.getDate()}`, ' ', `${new Date().getMonth()+1}/${new Date().getDate()}`];
+                drawLineChart(targetChartNotes, true, xLabels);
+            } else if (chartMode === 'month') {
+                targetChartNotes = getNotesByRange('month');
+                const days = new Date(viewYear, viewMonth + 1, 0).getDate();
+                xLabels = ['1日', `${Math.round(days*0.33)}日`, `${Math.round(days*0.66)}日`, `${days}日`];
+                drawLineChart(targetChartNotes, false, xLabels);
+            } else {
+                targetChartNotes = getNotesByRange('year');
+                xLabels = ['1月', '4月', '7月', '10月', '12月'];
+                drawLineChart(targetChartNotes, false, xLabels, 'year');
+            }
+
+            const yAxis = document.getElementById('y-axis'); yAxis.innerHTML = '';
+            [0, 4, 7, 11, 14].forEach(idx => {
+                const m = moods[idx];
+                yAxis.innerHTML += `<span>${m.customImg ? `<img src="${m.customImg}">` : m.emoji}</span>`;
+            });
+
+            const distNotes = getNotesByRange(distMode);
+            const total = distNotes.length;
+            const bar = document.getElementById('progress-bar'); const list = document.getElementById('stats-list');
+            bar.innerHTML = ''; list.innerHTML = '';
+            
+            if (total === 0) { bar.innerHTML = '<div style="width:100%; text-align:center; color:#aaa; font-size:12px; line-height:16px;">暂无数据</div>'; return; }
+
+            const counts = {};
+            distNotes.forEach(n => { counts[n.mood.id] = (counts[n.mood.id] || 0) + 1; });
+
+            moods.forEach(mood => {
+                const count = counts[mood.id] || 0;
+                if (count === 0) return;
+                const p = Math.round((count / total) * 100);
+                const seg = document.createElement('div'); seg.className = 'progress-segment'; seg.style.width = `${p}%`; seg.style.backgroundColor = mood.color; bar.appendChild(seg);
+                const item = document.createElement('div'); item.className = 'stats-item';
+                item.innerHTML = `<div class="stats-dot" style="background-color:${mood.color}"></div><div class="stats-info"><div class="stats-name">${mood.customImg ? `<img src="${mood.customImg}">` : mood.emoji} ${mood.text}</div><div class="stats-val">${count}次 · ${p}%</div></div>`;
+                list.appendChild(item);
+            });
+        }
+
+        function drawLineChart(data, isRaw, xLabels, type='month') {
+            const svg = document.getElementById('chart-svg'); svg.innerHTML = ''; 
+            const xAxis = document.getElementById('x-axis'); xAxis.innerHTML = xLabels.map(l => `<span>${l}</span>`).join('');
+            if(data.length === 0) return;
+
+            let points = [];
+            if (chartMode === 'day') {
+                data.forEach(n => {
+                    const [h, m] = n.time.split(':').map(Number);
+                    const x = ((h * 60 + m) / (24 * 60)) * 100; 
+                    const y = 100 - ((n.mood.score - 1) / 9 * 100);
+                    points.push({ x, y });
+                });
+            } else if (isRaw) {
+                data.forEach((n, i) => {
+                    points.push({ x: (i / (data.length - 1 || 1)) * 100, y: 100 - ((n.mood.score - 1) / 9 * 100) });
+                });
+            } else {
+                const grouped = {};
+                data.forEach(n => {
+                    let key = type === 'year' ? parseInt(n.dateStr.split('/')[1]) : parseInt(n.dateStr.split('/')[2]);
+                    if(!grouped[key]) grouped[key] = [];
+                    grouped[key].push(n.mood.score);
+                });
+                for(let key in grouped) {
+                    const avg = grouped[key].reduce((a,b)=>a+b,0) / grouped[key].length;
+                    let x = type === 'year' ? ((parseInt(key) - 1) / 11) * 100 : ((parseInt(key) - 1) / (new Date(viewYear, viewMonth + 1, 0).getDate() - 1)) * 100;
+                    points.push({ x, y: 100 - ((avg - 1) / 9 * 100) });
+                }
+                points.sort((a,b) => a.x - b.x);
+            }
+
+            if (points.length === 1) {
+                svg.innerHTML += `<circle cx="${points[0].x}" cy="${points[0].y}" r="4" fill="#fff" stroke="var(--chart)" stroke-width="2"/>`;
+                return;
+            }
+
+            let d = `M ${points[0].x} 100 L ${points[0].x} ${points[0].y}`;
+            for(let i=1; i<points.length; i++) d += ` L ${points[i].x} ${points[i].y}`;
+            d += ` L ${points[points.length-1].x} 100 Z`;
+            svg.innerHTML += `<path d="${d}" fill="rgba(120,164,164,0.15)"/>`;
+
+            let lineD = `M ${points[0].x} ${points[0].y}`;
+            for(let i=1; i<points.length; i++) lineD += ` L ${points[i].x} ${points[i].y}`;
+            svg.innerHTML += `<path d="${lineD}" stroke="var(--chart)" stroke-width="${isRaw ? '1.5' : '2'}" fill="none"/>`;
+
+            points.forEach(p => {
+                svg.innerHTML += `<circle cx="${p.x}" cy="${p.y}" r="${isRaw ? '3' : '3'}" fill="#fff" stroke="var(--chart)" stroke-width="1.5"/>`;
+            });
+        }
+
+        function renderMoods() {
+            const grid = document.getElementById('mood-grid'); grid.innerHTML = '';
+            moods.forEach(m => {
+                const div = document.createElement('div'); div.className = `mood-item ${currentMood.id === m.id ? 'selected' : ''}`;
+                div.onclick = () => { currentMood = m; renderMoods(); };
+                div.innerHTML = `<div class="face" style="background-color: ${m.color}">${m.customImg ? `<img src="${m.customImg}">` : m.emoji}</div><span>${m.text}</span>`;
+                grid.appendChild(div);
+            });
+        }
+
+        function renderCalendar() {
+            document.getElementById('current-month-text').innerText = `${viewMonth + 1}月`;
+            const grid = document.getElementById('calendar-grid'); grid.innerHTML = '';
+            const days = new Date(viewYear, viewMonth + 1, 0).getDate();
+            const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+            for(let i=0; i<firstDay; i++) grid.innerHTML += `<div></div>`;
+            const now = new Date();
+
+            for(let d=1; d<=days; d++) {
+                const dateStr = `${viewYear}/${(viewMonth+1).toString().padStart(2,'0')}/${d.toString().padStart(2,'0')}`;
+                const dayNotes = notes.filter(n => n.dateStr === dateStr);
+                const dayDiv = document.createElement('div'); dayDiv.className = 'cal-day';
+                if (viewYear === now.getFullYear() && viewMonth === now.getMonth() && d === now.getDate()) dayDiv.classList.add('today');
+
+                if(dayNotes.length > 0) {
+                    dayDiv.classList.add('has-mood');
+                    const lastMood = dayNotes[dayNotes.length-1].mood;
+                    dayDiv.style.backgroundColor = lastMood.color;
+                    dayDiv.innerHTML = `${lastMood.customImg ? `<img src="${lastMood.customImg}">` : lastMood.emoji}<div class="day-num">${d}</div>`;
+                } else { dayDiv.innerHTML = `${d}`; }
+                
+                dayDiv.onclick = () => {
+                    if (dayNotes.length > 0) openDetail(dayNotes[dayNotes.length - 1]);
+                    else { targetDate = dateStr; openModal(); }
+                };
+                grid.appendChild(dayDiv);
+            }
+        }
+
+        function renderTimeline() {
+            const query = document.getElementById('search-input').value.trim().toLowerCase();
+            const list = document.getElementById('timeline-list'); list.innerHTML = '';
+            let filtered = [...notes].sort((a,b) => b.id - a.id);
+            if(query) { filtered = filtered.filter(n => (n.text && n.text.toLowerCase().includes(query)) || (n.tags && n.tags.some(t => t.toLowerCase().includes(query)))); }
+            if(filtered.length === 0) { list.innerHTML = '<div style="text-align:center; color:#999; margin-top:20px;">没有找到相关记录</div>'; return; }
+
+            filtered.forEach(note => {
+                const div = document.createElement('div'); div.className = 'timeline-item';
+                div.onclick = () => openDetail(note);
+                div.innerHTML = `
+                    <div class="timeline-line" style="background-color: ${note.mood.color}"></div>
+                    <div class="tl-header"><div class="tl-date">${note.dateStr} ${note.time} · ${note.mood.text}</div><div class="tl-mood">${note.mood.customImg ? `<img src="${note.mood.customImg}">` : note.mood.emoji}</div></div>
+                    ${note.text ? `<div class="tl-text">${note.text}</div>` : ''}
+                    <div class="tl-tags">${note.tags ? note.tags.map(t => `<span class="tag">${t}</span>`).join('') : ''}</div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function renderBubbles() {
+            const c = document.getElementById('bubble-view'); c.innerHTML = '';
+            const pos = [{top:'5%',left:'15%',size:80},{top:'20%',left:'60%',size:100},{top:'45%',left:'25%',size:90},{top:'60%',left:'70%',size:75},{top:'75%',left:'15%',size:85},{top:'35%',left:'80%',size:80},{top:'15%',left:'40%',size:70},{top:'80%',left:'50%',size:95},{top:'30%',left:'10%',size:75},{top:'55%',left:'55%',size:85},{top:'65%',left:'35%',size:90},{top:'40%',left:'5%',size:70},{top:'10%',left:'75%',size:85},{top:'85%',left:'25%',size:80},{top:'70%',left:'85%',size:75}];
+            
+            moods.forEach((mood, i) => {
+                const count = notes.filter(n => n.mood.id === mood.id).length;
+                const p = pos[i];
+                const b = document.createElement('div'); b.className = 'bubble';
+                b.style.width = `${p.size}px`; b.style.height = `${p.size}px`; b.style.top = p.top; b.style.left = p.left;
+                b.style.backgroundColor = mood.color + 'AA'; b.style.animationDuration = `${3 + Math.random() * 3}s`; b.style.animationDelay = `${Math.random() * 2}s`;
+                if (count === 0) b.style.opacity = '0.3';
+                b.onclick = () => { showPage('timeline'); };
+                b.innerHTML = `<div class="bubble-emoji">${mood.customImg ? `<img src="${mood.customImg}">` : mood.emoji}</div><div class="bubble-text">${mood.text}</div><div class="bubble-count">${count} 篇</div>`;
+                c.appendChild(b);
+            });
+        }
+
+        function renderEmojiSettings() {
+            const grid = document.getElementById('emoji-settings-grid'); grid.innerHTML = '';
+            moods.forEach(m => {
+                const card = document.createElement('div'); card.className = 'emoji-card';
+                card.onclick = () => { cropTargetEmojiId = m.id; document.getElementById('emoji-upload-input').click(); };
+                card.innerHTML = `<div class="emoji-img-container">${m.customImg ? `<img src="${m.customImg}">` : m.emoji}</div><div class="emoji-name">${m.text}</div>`;
+                grid.appendChild(card);
+            });
+        }
+
+        function uploadCustomEmoji(e) {
+            const file = e.target.files[0]; if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 100; canvas.height = 100;
+                    canvas.getContext('2d').drawImage(img, 0, 0, 100, 100);
+                    const base64 = canvas.toDataURL('image/png');
+                    moods = moods.map(m => { if(m.id === cropTargetEmojiId) m.customImg = base64; return m; });
+                    localStorage.setItem('custom_moods', JSON.stringify(moods));
+                    renderEmojiSettings(); renderMoods(); 
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file); e.target.value = '';
+        }
+
+        function openModal() {
+            document.getElementById('add-modal').style.display = 'flex';
+            document.getElementById('note-text').value = '';
+            removeMedia(); currentMood = moods[0]; renderMoods(); renderTags();
+            document.getElementById('modal-title').innerText = targetDate ? `补写 ${targetDate} 的心情` : '今天的心情是？';
+        }
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; if(id === 'add-modal') targetDate = null; }
+
+        function openDetail(note) {
+            document.getElementById('detail-modal').style.display = 'flex';
+            document.getElementById('detail-icon').style.backgroundColor = note.mood.color;
+            document.getElementById('detail-icon').innerHTML = note.mood.customImg ? `<img src="${note.mood.customImg}">` : note.mood.emoji;
+            document.getElementById('detail-time').innerText = `${note.dateStr} ${note.time}`;
+            document.getElementById('detail-mood-name').innerText = note.mood.text;
+            document.getElementById('detail-text').innerText = note.text || '（未填写文字）';
+            const imgEl = document.getElementById('detail-img');
+            if(note.image) { imgEl.src = note.image; imgEl.style.display = 'block'; } else { imgEl.style.display = 'none'; }
+        }
+
+        function saveNote() {
+            let text = document.getElementById('note-text').value.trim();
+            if (!text && !imgData) return alert('写点什么吧～');
+            const tags = [];
+            text = text.replace(/#([^\s#]+)/g, (match, tag) => { tags.push(match); return match; });
+            const now = new Date();
+            let dateStr = targetDate ? targetDate : (now.getFullYear() + '/' + (now.getMonth()+1).toString().padStart(2,'0') + '/' + now.getDate().toString().padStart(2,'0'));
+            notes.push({ id: Date.now(), dateStr: dateStr, time: now.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'}), mood: currentMood, text: text, tags: tags, image: imgData });
+            localStorage.setItem('cosmos_notes_v8', JSON.stringify(notes));
+            closeModal('add-modal'); showPage('home'); 
+        }
+
+        function removeMedia() { imgData = null; document.getElementById('file-input-img').value = ''; document.getElementById('img-box').style.display = 'none'; }
+        function exportData() { alert('日记数据已复制到剪贴板！(测试功能)'); }
+
+        function toggleMonthPicker() { const p = document.getElementById('month-picker'); p.style.display = p.style.display === 'grid' ? 'none' : 'grid'; }
+        function renderMonthPicker() {
+            const p = document.getElementById('month-picker'); p.innerHTML = '';
+            for (let i = 1; i <= 12; i++) {
+                const d = document.createElement('div'); d.className = 'month-item'; d.innerText = `${i}月`;
+                d.onclick = () => { viewMonth = i - 1; p.style.display = 'none'; renderCalendar(); };
+                p.appendChild(d);
+            }
+        }
+
+        // 裁剪逻辑
+        let cropImgEl = document.getElementById('crop-img'), cropContainer = document.getElementById('crop-container'), cropBox = document.getElementById('crop-box');
+        let imgX = 0, imgY = 0, imgScale = 1, startX = 0, startY = 0, startDist = 0, isDraggingImg = false, baseScale = 1; 
+        let boxW = 0, boxH = 0, boxL = 0, boxT = 0, isResizing = false, resizeDir = '';
+
+        function startCrop(event) {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                cropImgEl.src = e.target.result;
+                cropImgEl.onload = function() { document.getElementById('crop-modal').style.display = 'flex'; setTimeout(resetCrop, 50); };
+            }; reader.readAsDataURL(file);
+        }
+
+        function resetCrop() {
+            const cw = cropContainer.clientWidth, ch = cropContainer.clientHeight;
+            const imgRatio = cropImgEl.naturalWidth / cropImgEl.naturalHeight;
+            if (imgRatio > 1) { cropImgEl.style.height = ch * 0.8 + 'px'; cropImgEl.style.width = 'auto'; } 
+            else { cropImgEl.style.width = cw * 0.8 + 'px'; cropImgEl.style.height = 'auto'; }
+            imgX = (cw - cropImgEl.clientWidth) / 2; imgY = (ch - cropImgEl.clientHeight) / 2;
+            imgScale = 1; baseScale = 1; updateImgTransform();
+            boxW = cw * 0.7; boxH = cw * 0.7; boxL = (cw - boxW) / 2; boxT = (ch - boxH) / 2;
+            updateBoxStyle();
+        }
+
+        function updateImgTransform() { cropImgEl.style.transform = `translate(${imgX}px, ${imgY}px) scale(${imgScale})`; }
+        function updateBoxStyle() { cropBox.style.width = boxW + 'px'; cropBox.style.height = boxH + 'px'; cropBox.style.left = boxL + 'px'; cropBox.style.top = boxT + 'px'; }
+        function cancelCrop() { document.getElementById('crop-modal').style.display = 'none'; document.getElementById('file-input-img').value = ''; }
+
+        function startResize(e, dir) { e.stopPropagation(); e.preventDefault(); isResizing = true; resizeDir = dir; }
+        document.addEventListener('mousemove', handleResize);
+        document.addEventListener('touchmove', handleResize, { passive: false });
+        document.addEventListener('mouseup', () => isResizing = false);
+        document.addEventListener('touchend', () => isResizing = false);
+
+        function handleResize(e) {
+            if(!isResizing) return;
+            e.preventDefault();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const rect = cropContainer.getBoundingClientRect();
+            const x = clientX - rect.left; const y = clientY - rect.top;
+
+            if(resizeDir.includes('r')) boxW = Math.max(100, x - boxL);
+            if(resizeDir.includes('l')) { const newW = Math.max(100, boxL + boxW - x); boxL = boxL + boxW - newW; boxW = newW; }
+            if(resizeDir.includes('b')) boxH = Math.max(100, y - boxT);
+            if(resizeDir.includes('t')) { const newH = Math.max(100, boxT + boxH - y); boxT = boxT + boxH - newH; boxH = newH; }
+            
+            if(boxL < 0) { boxW += boxL; boxL = 0; }
+            if(boxT < 0) { boxH += boxT; boxT = 0; }
+            if(boxL + boxW > rect.width) boxW = rect.width - boxL;
+            if(boxT + boxH > rect.height) boxH = rect.height - boxT;
+            updateBoxStyle();
+        }
+
+        cropContainer.addEventListener('touchstart', (e) => {
+            if(isResizing || e.target === cropBox || e.target.classList.contains('resize-handle')) return;
+            if (e.touches.length === 1) { isDraggingImg = true; startX = e.touches[0].clientX - imgX; startY = e.touches[0].clientY - imgY; } 
+            else if (e.touches.length === 2) { isDraggingImg = false; startDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); baseScale = imgScale; }
+        });
+
+        cropContainer.addEventListener('touchmove', (e) => {
+            if(isResizing) return;
+            if (isDraggingImg && e.touches.length === 1) {
+                e.preventDefault(); imgX = e.touches[0].clientX - startX; imgY = e.touches[0].clientY - startY; updateImgTransform(); 
+            } else if (e.touches.length === 2) {
+                e.preventDefault(); const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); 
+                imgScale = Math.max(0.5, baseScale * (dist / startDist)); updateImgTransform(); 
+            }
+        });
+        cropContainer.addEventListener('touchend', () => { isDraggingImg = false; });
+
+        cropContainer.addEventListener('mousedown', (e) => {
+            if(isResizing || e.target === cropBox || e.target.classList.contains('resize-handle')) return;
+            isDraggingImg = true; startX = e.clientX - imgX; startY = e.clientY - imgY;
+        });
+        cropContainer.addEventListener('mousemove', (e) => {
+            if(isDraggingImg) { imgX = e.clientX - startX; imgY = e.clientY - startY; updateImgTransform(); }
+        });
+        cropContainer.addEventListener('mouseup', () => isDraggingImg = false);
+
+        function confirmCrop() {
+            const canvas = document.createElement('canvas'); 
+            canvas.width = boxW * 2; canvas.height = boxH * 2;
+            const ctx = canvas.getContext('2d'); 
+            
+            const currentScaleX = cropImgEl.naturalWidth / cropImgEl.clientWidth; 
+            const currentScaleY = cropImgEl.naturalHeight / cropImgEl.clientHeight;
+            const offsetX = (boxL - imgX) * currentScaleX / imgScale; 
+            const offsetY = (boxT - imgY) * currentScaleY / imgScale;
+            const cropW = boxW * currentScaleX / imgScale; 
+            const cropH = boxH * currentScaleY / imgScale;
+
+            ctx.drawImage(cropImgEl, offsetX, offsetY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+            imgData = canvas.toDataURL('image/jpeg', 0.85);
+            
+            document.getElementById('img-preview').src = imgData; document.getElementById('img-box').style.display = 'flex';
+            document.getElementById('crop-modal').style.display = 'none'; document.getElementById('file-input-img').value = '';
+        }
+
+        init();
+    </script>
+</body>
+</html>
